@@ -43,7 +43,7 @@ st.title(" Myanmar Voice")
 text = st.text_area(
     "မြန်မာစာ",
     placeholder="အသံထုတ်ချင်တဲ့ မြန်မာစာကို ဒီမှာရေးပါ...",
-    height=250,ū
+    height=250,
     key="text"
 )
 
