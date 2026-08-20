@@ -1,4 +1,4 @@
-  import os
+import os
 import asyncio
 import tempfile
 import streamlit as st
@@ -43,7 +43,7 @@ st.title(" Myanmar Voice")
 text = st.text_area(
     "မြန်မာစာ",
     placeholder="အသံထုတ်ချင်တဲ့ မြန်မာစာကို ဒီမှာရေးပါ...",
-    height=250,
+    height=250,ū
     key="text"
 )
 
