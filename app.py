@@ -6,8 +6,9 @@ import edge_tts
 
 st.set_page_config(
     page_title="Myanmar Voice",
-    page_icon=""
+    page_icon="🔊"
 )
+
 
 def get_secret(name):
     try:
@@ -15,9 +16,14 @@ def get_secret(name):
     except Exception:
         return os.getenv(name, "")
 
+
 APP_USERNAME = get_secret("APP_USERNAME")
 APP_PASSWORD = get_secret("APP_PASSWORD")
 
+
+# -------------------------
+# Login
+# -------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
@@ -38,14 +44,21 @@ if not st.session_state.logged_in:
 
     st.stop()
 
-st.title(" Myanmar Voice")
+
+# -------------------------
+# Main App
+# -------------------------
+st.title("Myanmar Voice")
 
 text = st.text_area(
     "မြန်မာစာ",
     placeholder="အသံထုတ်ချင်တဲ့ မြန်မာစာကို ဒီမှာရေးပါ...",
-    height=250,
+    height=350,
     key="text"
 )
+
+st.caption(f"စာလုံးအရေအတွက်: {len(text):,}")
+
 
 voice = st.radio(
     "အသံရွေးပါ",
@@ -58,38 +71,164 @@ voice_id = {
     "Thiha": "my-MM-ThihaNeural"
 }[voice]
 
-async def make_voice(text, voice_id):
-    temp_file = tempfile.NamedTemporaryFile(
+
+# -------------------------
+# Speed
+# -------------------------
+speed = st.slider(
+    "အသံမြန်နှုန်း",
+    min_value=-50,
+    max_value=50,
+    value=0,
+    step=5,
+    help="0 = ပုံမှန်၊ အပေါင်း = မြန်၊ အနုတ် = နှေး"
+)
+
+if speed >= 0:
+    rate = f"+{speed}%"
+else:
+    rate = f"{speed}%"
+
+
+# -------------------------
+# Pitch
+# -------------------------
+pitch_value = st.slider(
+    "အသံအနိမ့် / အမြင့်",
+    min_value=-50,
+    max_value=50,
+    value=0,
+    step=5,
+    help="0 = ပုံမှန်၊ အပေါင်း = အသံမြင့်၊ အနုတ် = အသံနိမ့်"
+)
+
+if pitch_value >= 0:
+    pitch = f"+{pitch_value}Hz"
+else:
+    pitch = f"{pitch_value}Hz"
+
+
+# -------------------------
+# Split long text
+# -------------------------
+def split_long_text(text, max_chars=2500):
+    text = text.strip()
+
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    current = ""
+
+    # Burmese sentence ending mark ကိုသုံးပြီး ခွဲ
+    parts = text.replace("။", "။\n").splitlines()
+
+    for part in parts:
+        part = part.strip()
+
+        if not part:
+            continue
+
+        # စာကြောင်းတစ်ကြောင်းတည်း အရမ်းရှည်ရင် ဖြတ်
+        while len(part) > max_chars:
+            piece = part[:max_chars]
+            part = part[max_chars:]
+
+            if current:
+                chunks.append(current.strip())
+                current = ""
+
+            chunks.append(piece.strip())
+
+        if len(current) + len(part) + 1 <= max_chars:
+            if current:
+                current += " "
+            current += part
+        else:
+            if current:
+                chunks.append(current.strip())
+            current = part
+
+    if current:
+        chunks.append(current.strip())
+
+    return chunks
+
+
+# -------------------------
+# Create MP3
+# -------------------------
+async def make_voice(text, voice_id, rate, pitch):
+    chunks = split_long_text(text)
+
+    output_file = tempfile.NamedTemporaryFile(
         delete=False,
         suffix=".mp3"
     )
-    temp_path = temp_file.name
-    temp_file.close()
+    output_path = output_file.name
+    output_file.close()
 
-    communicate = edge_tts.Communicate(
-        text=text,
-        voice=voice_id
-    )
+    try:
+        with open(output_path, "wb") as final_audio:
+            for chunk in chunks:
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=".mp3"
+                )
+                temp_path = temp_file.name
+                temp_file.close()
 
-    await communicate.save(temp_path)
+                try:
+                    communicate = edge_tts.Communicate(
+                        text=chunk,
+                        voice=voice_id,
+                        rate=rate,
+                        pitch=pitch
+                    )
 
-    with open(temp_path, "rb") as f:
-        audio_data = f.read()
+                    await communicate.save(temp_path)
 
-    os.remove(temp_path)
-    return audio_data
+                    with open(temp_path, "rb") as f:
+                        final_audio.write(f.read())
 
-if st.button("Submit", type="primary"):
+                finally:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+        with open(output_path, "rb") as f:
+            audio_data = f.read()
+
+        return audio_data
+
+    finally:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+
+# -------------------------
+# Submit
+# -------------------------
+if st.button("အသံထုတ်မယ်", type="primary"):
     if not text.strip():
-        st.warning("မြန်မာစာ ထည့်ပေးပါ။")
+        st.warning("မြန်မာစာ အရင်ထည့်ပါ။")
     else:
         try:
             with st.spinner("အသံဖန်တီးနေပါတယ်..."):
                 audio = asyncio.run(
-                    make_voice(text, voice_id)
+                    make_voice(
+                        text,
+                        voice_id,
+                        rate,
+                        pitch
+                    )
                 )
 
-            st.audio(audio, format="audio/mp3")
+            st.success("အသံဖန်တီးပြီးပါပြီ။")
+
+            st.audio(
+                audio,
+                format="audio/mp3"
+            )
 
             st.download_button(
                 "Download MP3",
@@ -101,7 +240,15 @@ if st.button("Submit", type="primary"):
         except Exception as e:
             st.error(f"အသံဖန်တီးရာမှာ ပြဿနာဖြစ်ပါတယ်: {e}")
 
+
+# -------------------------
+# Clear
+# -------------------------
 def clear_text():
     st.session_state.text = ""
 
-st.button("Clear", on_click=clear_text)
+
+st.button(
+    "Clear",
+    on_click=clear_text
+            )
