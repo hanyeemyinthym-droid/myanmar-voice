@@ -1,2 +1,2 @@
-gradio
+ streamlit
 edge-tts
